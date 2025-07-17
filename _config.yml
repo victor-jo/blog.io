@@ -9,16 +9,13 @@
 # 'bundle exec jekyll serve'. If you change this file, please restart the server.
 
 # Site settings
-title: Victor Zo Blog
-email: your-email@example.com
-description: >- # this means to ignore newlines until "baseurl:"
-  Welcome to my personal blog where I share thoughts on technology, 
-  development, and life experiences.
+title: Victor's Blog
+email: joasjn45@gmail.com
+description: >-
 baseurl: "" # the subpath of your site, e.g. /blog
-url: "https://victor-zo-blog.io" # the base hostname & protocol for your site
+url: "https://victor-jo.github.io/blog.io"
 
-twitter_username: victorzo
-github_username: victorzo
+github_username: victor-jo
 
 # Build settings
 markdown: kramdown

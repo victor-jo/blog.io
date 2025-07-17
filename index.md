@@ -1,10 +1,9 @@
 ---
-layout: home
-title: Home
+layout: "home"
+title: ""
 ---
 
-# Welcome to Victor Zo Blog
+# 환영합니다
 
-This is a personal blog built with Jekyll and hosted on GitHub Pages. Here you'll find posts about technology, development, and various thoughts and experiences.
-
-Check out the [Posts](/posts) section to read my latest articles.
+이건 제 GitHub 의 개인공간 블로그이며, 개인의 지식 정리 공간으로 활용할 예정입니다. <br/>
+많은 인사이트 얻어가시고 제게도 많은 인사이트 주시면 감사하겠습니다.
