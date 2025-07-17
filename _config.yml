@@ -13,7 +13,7 @@ title: Victor's Blog
 email: joasjn45@gmail.com
 description: >-
 baseurl: "" # the subpath of your site, e.g. /blog
-url: "https://victor-jo.github.io/blog.io"
+url: "https://victor-jo.github.io"
 
 github_username: victor-jo
 
