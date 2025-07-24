@@ -411,7 +411,57 @@ kubectl describe pod -n kube-system -l k8s-app=cilium | grep prometheus
 
 ### 메트릭 활용 예시
 
-- TODO: 메트릭 활용 예시 작성 필요
+#### Grafana 대시보드 Import
+
+Cilium과 Hubble의 주요 메트릭을 한눈에 볼 수 있는 종합 대시보드를 제공합니다.
+```bash
+# Grafana 대시보드 JSON 파일 다운로드
+curl -O https://raw.githubusercontent.com/victor-jo/blog.io/main/assets/cilium/grafana/cilium-hubble-observability-dashboard.json
+```
+
+#### Grafana에 Import
+```bash
+# Grafana 웹 UI 접속
+echo "Grafana: http://192.168.10.100:30002"
+```
+
+1. 좌측 메뉴에서 **Dashboards** → **Import** 클릭
+2. **Upload JSON file** 버튼 클릭
+3. 다운로드한 `cilium-hubble-observability-dashboard.json` 파일 선택
+4. Data Source로 **Prometheus** 선택
+5. **Import** 버튼 클릭
+
+#### 대시보드 구성 요소
+
+대시보드는 다음과 같은 6개 카테고리로 구성되어 있으며, 각 패널은 특정 메트릭을 시각화합니다:
+
+**1. Cilium Agent 메트릭 (eBPF 및 정책 성능)**
+- **BPF Map 작업 모니터링**: eBPF 맵의 읽기/쓰기 작업 중 가장 많이 사용되는 상위 5개를 실시간으로 표시합니다. 성능 병목 현상을 파악하는 데 유용합니다.
+- **정책 적용 엔드포인트 수**: 네트워크 정책이 적용된 Pod/컨테이너의 총 개수를 보여줍니다. 정책 적용 범위를 한눈에 확인할 수 있습니다.
+- **정책 평가 시간 (95퍼센타일)**: 네트워크 정책을 평가하는 데 걸리는 시간의 95퍼센타일 값입니다. 대부분의 정책 평가가 이 시간 이내에 완료됨을 의미합니다.
+
+**2. Hubble 네트워크 플로우 메트릭**
+- **프로토콜별 네트워크 트래픽 분포**: TCP, UDP, ICMP 등 프로토콜별로 네트워크 트래픽이 어떻게 분포되어 있는지 보여줍니다.
+- **패킷 드롭 원인 분석**: 정책 위반(POLICY_DENIED), 연결 추적 실패(CT_INVALID) 등 패킷이 버려지는 원인을 분류하여 표시합니다.
+
+**3. DNS 모니터링**
+- **DNS 응답 코드별 쿼리 분포**: 성공(NOERROR), 도메인 없음(NXDOMAIN), 서버 오류(SERVFAIL) 등 DNS 응답 상태를 실시간으로 모니터링합니다.
+- **상위 DNS 쿼리 목록**: 가장 많이 조회되는 도메인 이름 10개를 테이블 형태로 표시합니다. 비정상적인 DNS 조회 패턴을 감지할 수 있습니다.
+
+**4. HTTP 트래픽 분석**
+- **HTTP 상태 코드 분포**: 2xx(성공), 4xx(클라이언트 오류), 5xx(서버 오류) 등 HTTP 응답 코드별 요청 수를 표시합니다.
+- **5xx 서버 오류율**: 전체 HTTP 요청 중 서버 오류(5xx)가 차지하는 비율을 게이지로 표시합니다. 10% 이상이면 경고 상태로 표시됩니다.
+- **HTTP 응답 시간 (95퍼센타일)**: 대부분의 HTTP 요청이 처리되는 시간을 표시합니다. 애플리케이션 성능 저하를 감지할 수 있습니다.
+
+**5. TCP 연결 상태 모니터링**
+- **TCP 플래그 분포**: SYN(연결 시작), FIN(연결 종료), RST(연결 재설정) 등 TCP 플래그별 패킷 수를 보여줍니다.
+- **TCP RST 비율**: 비정상적으로 종료된 연결의 비율을 표시합니다. 높은 RST 비율은 네트워크 문제나 공격을 의미할 수 있습니다.
+- **신규 TCP 연결 생성률**: 초당 생성되는 새로운 TCP 연결 수를 표시합니다. 트래픽 급증을 감지할 수 있습니다.
+
+**6. IPAM 및 Operator 운영 메트릭**
+- **사용 가능한 IP 주소 수**: 클러스터에서 Pod에 할당 가능한 남은 IP 주소의 최소값을 표시합니다. 10개 미만이면 경고 상태로 표시됩니다.
+- **IP 할당 소요 시간**: Pod에 IP 주소를 할당하는 데 걸리는 평균 시간을 표시합니다. 지연이 발생하면 스케일링 성능에 영향을 줄 수 있습니다.
+- **IP 할당 실패율**: IP 주소 할당 시도 중 실패한 비율을 표시합니다. 네트워크 구성 문제나 IP 부족을 나타낼 수 있습니다.
 
 ## 4. Layer 7 Protocol Visibility
 
@@ -460,13 +510,31 @@ EOF
 # HTTP 트래픽 모니터링
 hubble observe -f -t l7 -o compact
 
+# (⎈|HomeLab:N/A) root@k8s-ctr:~# hubble observe -f -t l7 -o compact
+# Jul 24 15:26:33.588: default/curl-pod:45054 (ID:1004) -> kube-system/coredns-674b8bbfcf-v6zt4:53 (ID:55355) dns-request proxy FORWARDED (DNS Query webpod.default.svc.cluster.local. A)
+# Jul 24 15:26:33.588: default/curl-pod:45054 (ID:1004) -> kube-system/coredns-674b8bbfcf-v6zt4:53 (ID:55355) dns-request proxy FORWARDED (DNS Query webpod.default.svc.cluster.local. AAAA)
+# Jul 24 15:26:33.591: default/curl-pod:45054 (ID:1004) <- kube-system/coredns-674b8bbfcf-v6zt4:53 (ID:55355) dns-response proxy FORWARDED (DNS Answer  TTL: 4294967295 (Proxy webpod.default.svc.cluster.local. AAAA))
+# Jul 24 15:26:33.594: default/curl-pod:45054 (ID:1004) <- kube-system/coredns-674b8bbfcf-v6zt4:53 (ID:55355) dns-response proxy FORWARDED (DNS Answer "10.96.234.100" TTL: 30 (Proxy webpod.default.svc.cluster.local. A))
+# Jul 24 15:26:33.599: default/curl-pod:34716 (ID:1004) -> default/webpod-74f6f7bd86-424rd:80 (ID:36509) http-request FORWARDED (HTTP/1.1 GET http://webpod/)
+# Jul 24 15:26:33.605: default/curl-pod:34716 (ID:1004) <- default/webpod-74f6f7bd86-424rd:80 (ID:36509) http-response FORWARDED (HTTP/1.1 200 7ms (GET http://webpod/))
+
 # 테스트 요청 실행
 kubectl exec -it curl-pod -- curl -s webpod
 
-# 응답 헤더 확인 (Envoy 경유 확인)
-# X-Envoy-Expected-Rq-Timeout-Ms
-# X-Envoy-Internal
-# X-Forwarded-Proto
+# Hostname: webpod-74f6f7bd86-xcj2t
+# IP: 127.0.0.1
+# IP: ::1
+# IP: 172.20.1.70
+# IP: fe80::a093:d4ff:fe57:6144
+# RemoteAddr: 172.20.0.90:42528
+# GET / HTTP/1.1
+# Host: webpod
+# User-Agent: curl/8.14.1
+# Accept: */*
+# ** X-Envoy-Expected-Rq-Timeout-Ms: 3600000 **
+# ** X-Envoy-Internal: true **
+# X-Forwarded-Proto: http
+# X-Request-Id: 1e596958-a1b6-4023-97dd-d666bffd079a
 ```
 
 ### Cilium Envoy 확인
@@ -486,33 +554,44 @@ kubectl describe cm -n kube-system cilium-envoy-config
 
 #### 민감정보 제거 설정
 ```bash
+# 모니터링
+hubble observe -f -t l7
+
+# 민감정보 테스트
+kubectl exec -it curl-pod -- sh -c 'curl -s webpod/?user_id=1234'
+
+# (⎈|HomeLab:N/A) root@k8s-ctr:~# hubble observe -f -t l7
+# Jul 24 16:19:54.941: default/curl-pod:56889 (ID:1004) -> kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-request proxy FORWARDED (DNS Query webpod.default.svc.cluster.local. AAAA)
+# Jul 24 16:19:54.941: default/curl-pod:56889 (ID:1004) -> kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-request proxy FORWARDED (DNS Query webpod.default.svc.cluster.local. A)
+# Jul 24 16:19:54.944: default/curl-pod:56889 (ID:1004) <- kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-response proxy FORWARDED (DNS Answer  TTL: 4294967295 (Proxy webpod.default.svc.cluster.local. AAAA))
+# Jul 24 16:19:54.944: default/curl-pod:56889 (ID:1004) <- kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-response proxy FORWARDED (DNS Answer "10.96.234.100" TTL: 30 (Proxy webpod.default.svc.cluster.local. A))
+# Jul 24 16:19:54.954: default/curl-pod:59088 (ID:1004) -> default/webpod-74f6f7bd86-xcj2t:80 (ID:36509) http-request FORWARDED (HTTP/1.1 GET http://webpod/?user_id=1234)
+# Jul 24 16:19:54.959: default/curl-pod:59088 (ID:1004) <- default/webpod-74f6f7bd86-xcj2t:80 (ID:36509) http-response FORWARDED (HTTP/1.1 200 5ms (GET http://webpod/?user_id=1234))
+
 # URL 쿼리 파라미터 제거
 helm upgrade cilium cilium/cilium --namespace kube-system --reuse-values \
   --set extraArgs="{--hubble-redact-enabled,--hubble-redact-http-urlquery}"
 
-# 테스트
-kubectl exec -it curl-pod -- sh -c 'curl -s webpod/?user_id=1234&token=secret'
+# Cilium 상태 확인
+cilium status --wait
 
-# 모니터링 (쿼리 파라미터가 제거됨)
+# 모니터링
 hubble observe -f -t l7
-```
 
-### L7 메트릭 활용
+# 민감정보 테스트
+kubectl exec -it curl-pod -- sh -c 'curl -s webpod/?user_id=1234'
 
-#### Grafana에서 L7 메트릭 확인
-- Hubble L7 HTTP Metrics by Workload 대시보드
-- HTTP 요청률, 응답 시간, 상태 코드별 분포
+# (⎈|HomeLab:N/A) root@k8s-ctr:~# hubble observe -f -t l7
+# Jul 24 16:21:06.427: default/curl-pod:42025 (ID:1004) -> kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-request proxy FORWARDED (DNS Query webpod.default.svc.cluster.local. A)
+# Jul 24 16:21:06.427: default/curl-pod:42025 (ID:1004) -> kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-request proxy FORWARDED (DNS Query webpod.default.svc.cluster.local. AAAA)
+# Jul 24 16:21:06.435: default/curl-pod:42025 (ID:1004) <- kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-response proxy FORWARDED (DNS Answer  TTL: 4294967295 (Proxy webpod.default.svc.cluster.local. AAAA))
+# Jul 24 16:21:06.439: default/curl-pod:42025 (ID:1004) <- kube-system/coredns-674b8bbfcf-9t6tc:53 (ID:55355) dns-response proxy FORWARDED (DNS Answer "10.96.234.100" TTL: 30 (Proxy webpod.default.svc.cluster.local. A))
+# Jul 24 16:21:06.457: default/curl-pod:34232 (ID:1004) -> default/webpod-74f6f7bd86-424rd:80 (ID:36509) http-request FORWARDED (HTTP/1.1 GET http://webpod/)
+# Jul 24 16:21:06.457: default/curl-pod:34232 (ID:1004) <- default/webpod-74f6f7bd86-424rd:80 (ID:36509) http-response FORWARDED (HTTP/1.1 200 8ms (GET http://webpod/))
 
-#### PromQL 쿼리 예시
-```promql
-# HTTP 요청률
-rate(hubble_http_requests_total[5m])
-
-# HTTP 응답 시간 (P95)
-histogram_quantile(0.95, rate(hubble_http_request_duration_seconds_bucket[5m]))
-
-# HTTP 에러율
-rate(hubble_http_requests_total{http_status_code=~"5.."}[5m])
+# 민감정보 가리기 옵션 해제
+helm upgrade cilium cilium/cilium --namespace kube-system --reuse-values \
+  --set extraArgs="{}"
 ```
 
 ## 5. pwru (Packet, where are you?)
@@ -574,57 +653,10 @@ sudo ./pwru "host $PODIP"
 kubectl exec curl-pod -- curl webpod
 ```
 
-## 주요 도전 과제
-
-### 도전과제1: Dynamic Hubble Exporter 설정
-```bash
-helm upgrade cilium cilium/cilium --namespace kube-system --reuse-values \
-  --set hubble.export.dynamic.enabled=true \
-  --set hubble.export.dynamic.config.content[0].name=system \
-  --set hubble.export.dynamic.config.content[0].filePath=/var/run/cilium/hubble/events-system.log \
-  --set hubble.export.dynamic.config.content[0].includeFilters[0].source_pod[0]='kube_system/'
-```
-
-### 도전과제2: Hubble TLS 설정
-```bash
-# TLS 인증서 생성 및 설정
-helm upgrade cilium cilium/cilium --namespace kube-system --reuse-values \
-  --set hubble.tls.enabled=true \
-  --set hubble.tls.auto.enabled=true
-```
-
-### 도전과제3: Prometheus Stack 설치
-```bash
-# Prometheus Operator 설치
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-  --namespace monitoring --create-namespace
-
-# ServiceMonitor 생성으로 Cilium 메트릭 수집
-```
-
-## 운영 시 고려사항
-
-### 성능 최적화
-- 대규모 클러스터에서는 헬스체크 비활성화 고려
-- Hubble flow logs 선택적 수집 (필터링)
-- 메트릭 수집 간격 조정
-
-### 보안
-- Hubble UI/API HTTPS 설정
-- 민감정보 redaction 설정
-- 네트워크 정책 적용 시 철저한 테스트
-
-### 모니터링
-- 핵심 메트릭: drop율, 지연시간, 에러율
-- L7 가시성은 필요한 경우에만 활성화
-- Grafana 알림 설정으로 이상 감지
-
 ## 추가 자료 및 참고 링크
 
 ### 공식 문서
-- [Cilium Observability Documentation](https://docs.cilium.io/en/stable/observability/)
-- [Hubble Documentation](https://docs.cilium.io/en/stable/observability/hubble/)
+- [Cilium Hubble Documentation](https://docs.cilium.io/en/stable/observability/hubble/)
 - [Cilium Metrics Reference](https://docs.cilium.io/en/stable/observability/metrics/)
 
 ### 관련 도구
@@ -632,12 +664,3 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
 - [Tetragon - Security Observability](https://github.com/cilium/tetragon)
 - [Prometheus](https://prometheus.io/)
 - [Grafana](https://grafana.com/)
-
-### 커뮤니티 리소스
-- [eCHO (eBPF & Cilium Office Hours) YouTube Playlist](https://www.youtube.com/playlist?list=PLDg_GiBbAx-mY3VFLPbLHcxo6wUjejAOC)
-- [Cilium Slack](https://cilium.herokuapp.com/)
-- [CNCF Slack #cilium channel](https://cloud-native.slack.com/)
-
----
-
-*이 가이드는 Cilium v1.17.6 기준으로 작성되었습니다.*
