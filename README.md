@@ -16,15 +16,6 @@ To run this blog locally:
 4. Run `bundle exec jekyll serve`
 5. Visit `http://localhost:4000`
 
-## Deployment
-
-This blog automatically deploys to GitHub Pages when changes are pushed to the main branch.
-
-## Theme
-
-Uses the [Minima](https://github.com/jekyll/minima) theme with dark skin.
-
 ## Contact
 
-- GitHub: [@victorzo](https://github.com/victorzo)
-- Twitter: [@victorzo](https://twitter.com/victorzo)
+- GitHub: [@victorzo](https://github.com/victor-jo)

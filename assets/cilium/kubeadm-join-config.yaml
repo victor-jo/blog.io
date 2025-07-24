@@ -13,8 +13,8 @@ nodeRegistration:
   imagePullSerial: true
   kubeletExtraArgs:
   - name: node-ip
-    value: 192.168.10.101
-  name: k8s-w1
+    value: NODE_IP_PLACEHOLDER
+  name: NODE_NAME_PLACEHOLDER
   taints: null
 timeouts:
   controlPlaneComponentHealthCheck: 4m0s

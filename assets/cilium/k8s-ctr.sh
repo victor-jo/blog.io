@@ -49,11 +49,13 @@ kubectl config rename-context "kubernetes-admin@kubernetes" "HomeLab" >/dev/null
 
 
 echo "[TASK 7] Install k9s"
+CLI_ARCH=amd64
+if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
 K9S_VERSION=$(curl -s https://api.github.com/repos/derailed/k9s/releases/latest | grep "tag_name" | cut -d : -f 2 | tr -d \"\, | awk '{$1=$1};1')
-wget https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_arm64.tar.gz >/dev/null 2>&1
-tar -zxvf k9s_Linux_arm64.tar.gz >/dev/null 2>&1
-mv k9s /usr/local/bin/k9s
-rm k9s_Linux_arm64.tar.gz LICENSE README.md >/dev/null 2>&1
+wget https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_${CLI_ARCH}.tar.gz >/dev/null 2>&1
+tar -zxvf k9s_Linux_${CLI_ARCH}.tar.gz >/dev/null 2>&1
+mv k9s /usr/local/bin/k9s >/dev/null 2>&1
+rm k9s_Linux_${CLI_ARCH}.tar.gz LICENSE README.md >/dev/null 2>&1
 
 echo "[TASK 8] Add Hosts Entry for Worker Nodes"
 echo "192.168.10.100 k8s-ctr" >> /etc/hosts
@@ -61,10 +63,12 @@ for (( i=1; i<=$1; i++ )); do echo "192.168.10.10$i k8s-w$i" >> /etc/hosts; done
 
 echo "[TASK 9] Install stern"
 STERN_VERSION=1.32.0
-wget https://github.com/stern/stern/releases/download/v${STERN_VERSION}/stern_${STERN_VERSION}_linux_arm64.tar.gz >/dev/null 2>&1
-tar -zxvf stern_${STERN_VERSION}_linux_arm64.tar.gz >/dev/null 2>&1
-mv stern /usr/local/bin/stern
-rm stern_${STERN_VERSION}_linux_arm64.tar.gz
+CLI_ARCH=amd64
+if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
+wget https://github.com/stern/stern/releases/download/v${STERN_VERSION}/stern_${STERN_VERSION}_linux_${CLI_ARCH}.tar.gz >/dev/null 2>&1
+tar -zxvf stern_${STERN_VERSION}_linux_${CLI_ARCH}.tar.gz >/dev/null 2>&1
+mv stern /usr/local/bin/stern >/dev/null 2>&1
+rm stern_${STERN_VERSION}_linux_${CLI_ARCH}.tar.gz >/dev/null 2>&1
 
 if [ -f /vagrant/k8s-cni.sh ]; then
   chmod +x /vagrant/k8s-cni.sh
