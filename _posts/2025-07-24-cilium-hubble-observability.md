@@ -244,9 +244,10 @@ echo "Grafana: http://192.168.10.100:30002"
 ```bash
 # 메트릭 포트 확인
 ss -tnlp | grep -E '9962|9963|9965'
-# 9962: cilium-agent metrics
-# 9963: cilium-operator metrics  
-# 9965: hubble metrics
+# (⎈|HomeLab:N/A) root@k8s-ctr:~# ss -tnlp | grep -E '9962|9963|9965'
+# LISTEN 0      4096                *:9965             *:*    users:(("cilium-agent",pid=7689,fd=46))                
+# LISTEN 0      4096                *:9963             *:*    users:(("cilium-operator",pid=4897,fd=7))              
+# LISTEN 0      4096                *:9962             *:*    users:(("cilium-agent",pid=7689,fd=7))   
 
 # 메트릭 직접 확인
 curl localhost:9962/metrics | grep cilium_
@@ -355,12 +356,29 @@ Cilium, Hubble, Cilium Operator는 기본적으로 메트릭을 노출하지 않
 
 ```bash
 # 이미 설정되어 있는 경우 확인
-cilium config view | grep -i prometheus
+cilium config view | grep -Ei "prometheus|hubble"
 
 # 메트릭 활성화 설정값
-# prometheus.enabled=true: cilium-agent 메트릭 활성화 (포트 9962)
-# operator.prometheus.enabled=true: cilium-operator 메트릭 활성화 (포트 9963)
-# hubble.metrics.enabled: Hubble 메트릭 활성화 (포트 9965)
+# (⎈|HomeLab:N/A) root@k8s-ctr:~# cilium config view | grep -Ei "prometheus|hubble"
+# enable-hubble                                     true
+# enable-hubble-open-metrics                        true
+# hubble-disable-tls                                false
+# hubble-export-allowlist                           
+# hubble-export-denylist                            
+# hubble-export-fieldmask                           
+# hubble-export-file-max-backups                    5
+# hubble-export-file-max-size-mb                    10
+# hubble-export-file-path                           /var/run/cilium/hubble/events.log
+# hubble-listen-address                             :4244
+# hubble-metrics                                    dns drop tcp flow port-distribution icmp httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction
+# hubble-metrics-server                             :9965
+# hubble-metrics-server-enable-tls                  false
+# hubble-socket-path                                /var/run/cilium/hubble.sock
+# hubble-tls-cert-file                              /var/lib/cilium/tls/hubble/server.crt
+# hubble-tls-client-ca-files                        /var/lib/cilium/tls/hubble/client-ca.crt
+# hubble-tls-key-file                               /var/lib/cilium/tls/hubble/server.key
+# operator-prometheus-serve-addr                    :9963
+# prometheus-serve-addr                             :9962
 ```
 
 #### 메트릭 수집 확인
@@ -393,48 +411,7 @@ kubectl describe pod -n kube-system -l k8s-app=cilium | grep prometheus
 
 ### 메트릭 활용 예시
 
-#### Cilium 단축키 설정
-```bash
-# cilium 파드 이름 설정
-export CILIUMPOD0=$(kubectl get -l k8s-app=cilium pods -n kube-system --field-selector spec.nodeName=k8s-ctr -o jsonpath='{.items[0].metadata.name}')
-export CILIUMPOD1=$(kubectl get -l k8s-app=cilium pods -n kube-system --field-selector spec.nodeName=k8s-w1 -o jsonpath='{.items[0].metadata.name}')
-export CILIUMPOD2=$(kubectl get -l k8s-app=cilium pods -n kube-system --field-selector spec.nodeName=k8s-w2 -o jsonpath='{.items[0].metadata.name}')
-
-# 단축키 설정
-alias c0="kubectl exec -it $CILIUMPOD0 -n kube-system -c cilium-agent -- cilium"
-alias c1="kubectl exec -it $CILIUMPOD1 -n kube-system -c cilium-agent -- cilium"
-alias c2="kubectl exec -it $CILIUMPOD2 -n kube-system -c cilium-agent -- cilium"
-```
-
-#### 엔드포인트 및 서비스 모니터링
-```bash
-# 엔드포인트 목록
-c0 endpoint list
-c1 endpoint list
-c2 endpoint list
-
-# 서비스 목록
-c0 service list
-c1 service list
-c2 service list
-
-# BPF 맵 정보
-c0 bpf lb list
-c1 bpf ct list global
-c2 bpf nat list
-```
-
-### OpenMetrics 지원
-
-OpenMetrics는 메트릭 형식의 표준으로, Exemplar와 같은 고급 기능을 지원합니다.
-
-```bash
-# OpenMetrics 활성화 확인
-cilium config view | grep enableOpenMetrics
-
-# Exemplar를 포함한 HTTP 메트릭 확인
-curl localhost:9965/metrics | grep "# HELP hubble_http"
-```
+- TODO: 메트릭 활용 예시 작성 필요
 
 ## 4. Layer 7 Protocol Visibility
 
