@@ -66,4 +66,9 @@ tar -zxvf stern_${STERN_VERSION}_linux_arm64.tar.gz >/dev/null 2>&1
 mv stern /usr/local/bin/stern
 rm stern_${STERN_VERSION}_linux_arm64.tar.gz
 
+if [ -f /vagrant/k8s-cni.sh ]; then
+  chmod +x /vagrant/k8s-cni.sh
+  /vagrant/k8s-cni.sh $2
+fi
+
 echo ">>>> K8S Controlplane Config End <<<<"
