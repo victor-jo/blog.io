@@ -65,7 +65,7 @@ Hubble은 완전히 분산된 네트워킹 및 보안 관측 가능성 플랫폼
 
 ### Hubble 설치 및 설정
 
-#### Hubble 활성화
+#### Hubble 활성화 (Static + Dynamic Exporter)
 ```bash
 # Hubble 활성화 (메트릭 설정 포함)
 helm upgrade cilium cilium/cilium --version 1.17.6 --namespace kube-system --reuse-values \
@@ -76,13 +76,31 @@ helm upgrade cilium cilium/cilium --version 1.17.6 --namespace kube-system --reu
   --set hubble.ui.service.nodePort=31234 \
   --set hubble.export.static.enabled=true \
   --set hubble.export.static.filePath=/var/run/cilium/hubble/events.log \
+  --set hubble.export.dynamic.enabled=true \
+  --set hubble.export.dynamic.config.configMapName=hubble-dynamic-config \
   --set prometheus.enabled=true \
   --set operator.prometheus.enabled=true \
   --set hubble.metrics.enableOpenMetrics=true \
   --set hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,httpV2:exemplars=true;labelsContext=source_ip\,source_namespace\,source_workload\,destination_ip\,destination_namespace\,destination_workload\,traffic_direction}"
 
-# 설치 확인
+# Cilium 상태 확인
 cilium status --wait
+
+
+# ConfigMap을 통한 Hubble Exporter 설정
+kubectl edit configmap hubble-dynamic-config -n kube-system
+
+# flowLogs:
+# - excludeFilters: []
+#   fieldMask: []
+#   filePath: /var/run/cilium/hubble/events.log
+#   includeFilters: []
+#   name: all
+# - name: "default-pods"
+#   filePath: "/var/run/cilium/hubble/default-pods.log"
+#   fieldMask: ["source.namespace", "source.pod_name", "destination.namespace", "destination.pod_name", "verdict"]
+#   includeFilters:
+#   - source_pod: ["default/"]
 
 # Hubble UI 접속 주소 확인
 NODEIP=$(ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
@@ -204,13 +222,38 @@ kubectl delete -f https://raw.githubusercontent.com/cilium/cilium/1.17.6/example
 
 ### Hubble Flow Logs Export
 
-#### Flow Logs 설정 확인
-```bash
-# Hubble export 설정 확인
-cilium config view | grep hubble-export
+#### 분리된 로그 확인
 
-# Flow logs 확인
+```bash
+# 모든 트래픽 로그 확인
 kubectl -n kube-system exec ds/cilium -- tail -f /var/run/cilium/hubble/events.log
+
+# Default 네임스페이스에 존재하는 Pod 에서 시작하는 통신 트래픽 확인
+kubectl -n kube-system exec ds/cilium -- tail -f /var/run/cilium/hubble/default-pods.log
+
+# (⎈|HomeLab:N/A) root@k8s-ctr:~# kubectl -n kube-system exec ds/cilium -- tail -f /var/run/cilium/hubble/default-pods.log
+# {"flow":{"verdict":"TRACED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"TRACED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"TRACED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"FORWARDED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"TRACED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"TRACED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"FORWARDED","source":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"},"destination":{"namespace":"default","pod_name":"tiefighter"}}}
+# {"flow":{"verdict":"FORWARDED","source":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"},"destination":{"namespace":"default","pod_name":"tiefighter"}}}
+# {"flow":{"verdict":"FORWARDED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+# {"flow":{"verdict":"FORWARDED","source":{"namespace":"default","pod_name":"tiefighter"},"destination":{"namespace":"default","pod_name":"deathstar-8c4c77fb7-f5gf8"}}}
+
+```
+
+#### 로그 관리 및 로테이션
+
+Dynamic Exporter는 Static Exporter의 로그 관리 설정을 상속받습니다:
+
+```bash
+# 로그 파일 크기 및 백업 설정 (모든 export 파일에 적용)
+helm upgrade cilium cilium/cilium --namespace kube-system --reuse-values \
+  --set hubble.export.fileMaxSizeMb=50 \
+  --set hubble.export.fileMaxBackups=5
 ```
 
 ## 2. Running Prometheus & Grafana
@@ -254,31 +297,6 @@ curl localhost:9962/metrics | grep cilium_
 curl localhost:9963/metrics | grep cilium_operator_
 curl localhost:9965/metrics | grep hubble_
 ```
-
-### Grafana 대시보드 활용
-
-#### 사전 구성된 대시보드
-- **Cilium Metrics**: Generic, API, BPF, kvstore, Network info, Endpoints, k8s integration
-- **Cilium Operator**: IPAM 관련 메트릭
-- **Hubble**: General Processing, Network, Network Policy, HTTP, DNS
-- **Hubble L7 HTTP Metrics by Workload**: HTTP 요청 분석
-
-#### 주요 PromQL 쿼리 예시
-```promql
-# BPF Map 작업 수 (상위 5개)
-topk(5, avg(rate(cilium_bpf_map_ops_total{k8s_app="cilium"}[5m])) by (pod, map_name, operation))
-
-# Hubble Drop 이벤트
-hubble_drop_total
-
-# HTTP 요청률
-rate(hubble_http_requests_total[5m])
-
-# DNS 쿼리
-rate(hubble_dns_queries_total[5m])
-```
-
-### 샘플 애플리케이션 모니터링
 
 #### 테스트 애플리케이션 배포
 ```bash
@@ -339,6 +357,10 @@ spec:
     image: nicolaka/netshoot
     command: ["tail", "-f", "/dev/null"]
 EOF
+
+# 상태 확인
+kubectl get deploy,pod | grep -Ei "curl|webpod"
+
 ```
 
 #### 트래픽 생성 및 모니터링
@@ -358,7 +380,6 @@ Cilium, Hubble, Cilium Operator는 기본적으로 메트릭을 노출하지 않
 # 이미 설정되어 있는 경우 확인
 cilium config view | grep -Ei "prometheus|hubble"
 
-# 메트릭 활성화 설정값
 # (⎈|HomeLab:N/A) root@k8s-ctr:~# cilium config view | grep -Ei "prometheus|hubble"
 # enable-hubble                                     true
 # enable-hubble-open-metrics                        true
@@ -369,6 +390,7 @@ cilium config view | grep -Ei "prometheus|hubble"
 # hubble-export-file-max-backups                    5
 # hubble-export-file-max-size-mb                    10
 # hubble-export-file-path                           /var/run/cilium/hubble/events.log
+# hubble-flowlogs-config-path                       /flowlog-config/flowlogs.yaml
 # hubble-listen-address                             :4244
 # hubble-metrics                                    dns drop tcp flow port-distribution icmp httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction
 # hubble-metrics-server                             :9965
@@ -415,8 +437,11 @@ kubectl describe pod -n kube-system -l k8s-app=cilium | grep prometheus
 
 Cilium과 Hubble의 주요 메트릭을 한눈에 볼 수 있는 종합 대시보드를 제공합니다.
 ```bash
-# Grafana 대시보드 JSON 파일 다운로드
+# Grafana 대시보드 JSON 파일 다운로드 - 1
 curl -O https://raw.githubusercontent.com/victor-jo/blog.io/main/assets/cilium/grafana/cilium-hubble-observability-dashboard.json
+
+# Grafana 대시보드 JSON 파일 다운로드 - 2
+curl -O https://raw.githubusercontent.com/victor-jo/blog.io/main/assets/cilium/grafana/cilium-metrics-dashboard.json
 ```
 
 #### Grafana에 Import
@@ -427,7 +452,7 @@ echo "Grafana: http://192.168.10.100:30002"
 
 1. 좌측 메뉴에서 **Dashboards** → **Import** 클릭
 2. **Upload JSON file** 버튼 클릭
-3. 다운로드한 `cilium-hubble-observability-dashboard.json` 파일 선택
+3. 다운로드한 `cilium-hubble-observability-dashboard.json`, `cilium-metrics-dashboard.json` 파일 하나씩 선택
 4. Data Source로 **Prometheus** 선택
 5. **Import** 버튼 클릭
 
@@ -664,3 +689,6 @@ kubectl exec curl-pod -- curl webpod
 - [Tetragon - Security Observability](https://github.com/cilium/tetragon)
 - [Prometheus](https://prometheus.io/)
 - [Grafana](https://grafana.com/)
+
+### 대시보드 출처
+- [Cilium Metrics](https://grafana.com/grafana/dashboards/22126-cilium-metrics/)
